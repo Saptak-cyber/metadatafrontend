@@ -1,0 +1,27 @@
+{
+  "testData": {
+    "name": "Sample JSON Upload Test",
+    "description": "This JSON file tests the upload functionality",
+    "timestamp": "2025-11-15T12:00:00Z",
+    "features": [
+      "Multi-database support",
+      "Intelligent routing",
+      "Tag-based search",
+      "File preview"
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "author": "File Manager Dashboard",
+      "category": "test"
+    },
+    "nestedData": {
+      "level1": {
+        "level2": {
+          "level3": {
+            "deepValue": "This tests deep nesting for MongoDB selection"
+          }
+        }
+      }
+    }
+  }
+}

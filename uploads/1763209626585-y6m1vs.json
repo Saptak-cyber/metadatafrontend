@@ -1,0 +1,71 @@
+[
+  {
+    "id": 1,
+    "name": "XQPD",
+    "age": 27,
+    "score": 81
+  },
+  {
+    "id": 2,
+    "name": "LKRM",
+    "age": 34,
+    "score": 66,
+    "active": true
+  },
+  {
+    "id": 3,
+    "name": "HTNS",
+    "age": 22,
+    "score": 92,
+    "city": "Delhi",
+    "active": false
+  },
+  {
+    "id": 4,
+    "name": "PZKA",
+    "age": 29,
+    "score": 73
+  },
+  {
+    "id": 5,
+    "name": "WBJE",
+    "age": 31,
+    "score": 58,
+    "active": true
+  },
+  {
+    "id": 6,
+    "name": "QMTU",
+    "age": 26,
+    "score": 89,
+    "city": "Mumbai"
+  },
+  {
+    "id": 7,
+    "name": "AFYR",
+    "age": 24,
+    "score": 77,
+    "active": false
+  },
+  {
+    "id": 8,
+    "name": "JDQP",
+    "age": 35,
+    "score": 64,
+    "city": "Pune",
+    "active": true
+  },
+  {
+    "id": 9,
+    "name": "VZLO",
+    "age": 28,
+    "score": 85
+  },
+  {
+    "id": 10,
+    "name": "CMRX",
+    "age": 33,
+    "score": 79,
+    "city": "Chennai"
+  }
+]
