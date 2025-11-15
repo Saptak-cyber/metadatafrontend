@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight, Table2, FileJson, ExternalLink } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ChevronDown, ChevronRight, Table2, FileJson, Share2, Copy, FileDown } from "lucide-react";
 
 interface JsonTableViewerProps {
   data: any;
@@ -20,6 +20,21 @@ export default function JsonTableViewer({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [displayLimit, setDisplayLimit] = useState(50);
   const [showAll, setShowAll] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+
+    if (exportMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [exportMenuOpen]);
 
   const toggleExpand = (path: string) => {
     const newExpanded = new Set(expandedPaths);
@@ -341,7 +356,23 @@ export default function JsonTableViewer({
   };
 
   const downloadCSV = () => {
-    const csv = convertToCSV();
+    let csv: string;
+    
+    if (Array.isArray(data) && data.length > 0) {
+      csv = convertToCSV();
+    } else {
+      // For non-array data, create a simple key-value CSV
+      if (typeof data === "object" && data !== null) {
+        const entries = Object.entries(data);
+        csv = "Key,Value\n" + entries.map(([key, value]) => {
+          const val = typeof value === "object" ? JSON.stringify(value) : String(value);
+          return `"${key}","${val.replace(/"/g, '""')}"`;
+        }).join("\n");
+      } else {
+        csv = `Value\n"${String(data).replace(/"/g, '""')}"`;
+      }
+    }
+    
     if (!csv) {
       alert("No data available to export");
       return;
@@ -357,6 +388,100 @@ export default function JsonTableViewer({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setExportMenuOpen(false);
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      let textToCopy: string;
+      
+      // If in table view and data is array, copy as CSV
+      if (viewMode === "table" && Array.isArray(data)) {
+        textToCopy = convertToCSV();
+        if (!textToCopy) {
+          alert("No data available to copy");
+          return;
+        }
+      } else {
+        // Otherwise copy as formatted JSON
+        textToCopy = JSON.stringify(data, null, 2);
+      }
+
+      await navigator.clipboard.writeText(textToCopy);
+      alert(`Data copied to clipboard${viewMode === "table" && Array.isArray(data) ? " as CSV" : " as JSON"}!`);
+      setExportMenuOpen(false);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      alert("Failed to copy data to clipboard");
+    }
+  };
+
+  const downloadExcel = async () => {
+    if (!data) {
+      alert('No data available to export');
+      return;
+    }
+
+    try {
+      // Dynamically import xlsx to avoid SSR/bundle issues
+      const XLSX = await import('xlsx');
+
+      let sheetData: any[];
+      
+      if (Array.isArray(data) && data.length > 0) {
+        // Build worksheet data as array of objects
+        const allKeys = new Set<string>();
+        data.forEach((item) => {
+          if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+            Object.keys(item).forEach((k) => allKeys.add(k));
+          }
+        });
+        const columns = Array.from(allKeys);
+
+        sheetData = data.map((row: any) => {
+          const out: Record<string, any> = {};
+          columns.forEach((col) => {
+            const value = row[col];
+            if (value === null || value === undefined) {
+              out[col] = '';
+            } else if (typeof value === 'object') {
+              out[col] = JSON.stringify(value);
+            } else {
+              out[col] = value;
+            }
+          });
+          return out;
+        });
+      } else if (typeof data === 'object' && data !== null) {
+        // For non-array objects, create key-value pairs
+        sheetData = Object.entries(data).map(([key, value]) => ({
+          Key: key,
+          Value: typeof value === 'object' ? JSON.stringify(value) : value
+        }));
+      } else {
+        sheetData = [{ Value: data }];
+      }
+
+      const ws = XLSX.utils.json_to_sheet(sheetData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title.replace(/[^a-z0-9]/gi, '_')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setExportMenuOpen(false);
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      alert('Failed to export Excel. Falling back to CSV.');
+      downloadCSV();
+    }
   };
 
   return (
@@ -415,16 +540,45 @@ export default function JsonTableViewer({
             </div>
           )}
           
-          {/* CSV download button for PostgreSQL table data */}
-          {storageType === "postgres" && viewMode === "table" && Array.isArray(data) && data.length > 0 && (
-            <button
-              onClick={downloadCSV}
-              className="px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-all bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-500 hover:to-emerald-500 shadow-lg shadow-green-500/30 hover:scale-105"
-              title="Download as CSV file"
-            >
-              <ExternalLink size={16} />
-              Download CSV
-            </button>
+          {/* Export dropdown - available for all data types */}
+          {(Array.isArray(data) || (typeof data === "object" && data !== null)) && (
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                className="px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-all bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-500 hover:to-emerald-500 shadow-lg shadow-green-500/30 hover:scale-105"
+                title="Export data"
+              >
+                <Share2 size={16} />
+                Export
+                <ChevronDown size={14} className={`transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {exportMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
+                  <button
+                    onClick={copyToClipboard}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors text-left"
+                  >
+                    <Copy size={16} className="text-blue-400" />
+                    Copy to Clipboard
+                  </button>
+                  <button
+                    onClick={downloadCSV}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors text-left border-t border-gray-700"
+                  >
+                    <FileDown size={16} className="text-green-400" />
+                    Download CSV
+                  </button>
+                  <button
+                    onClick={downloadExcel}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition-colors text-left border-t border-gray-700"
+                  >
+                    <FileDown size={16} className="text-yellow-400" />
+                    Download Excel
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

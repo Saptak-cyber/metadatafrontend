@@ -87,24 +87,6 @@ export default function FilePreviewModal({
         if (file.extension === "json") {
           return (
             <div className="space-y-4">
-              <div className="flex justify-end mb-2">
-                <button
-                  onClick={handleCopyJson}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all font-medium shadow-sm hover:shadow"
-                >
-                  {copied ? (
-                    <>
-                      <Check size={18} />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={18} />
-                      Copy JSON
-                    </>
-                  )}
-                </button>
-              </div>
               <JsonTableViewer
                 data={content || file.metadata}
                 title={file.originalName}
