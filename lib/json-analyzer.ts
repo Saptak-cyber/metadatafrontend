@@ -254,152 +254,87 @@ function hasNestedArrays(obj: any): boolean {
 
 function determineRecommendation(analysis: StructureAnalysis) {
   const reasons: string[] = [];
-  let sqlScore = 0;
-  let mongoScore = 0;
-
-  // Factor 1: Nesting depth (weight: 30) - INCREASED weight
-  if (analysis.isDeeplyNested) {
-    mongoScore += 30;
-    reasons.push(
-      `Deep nesting (${analysis.nestingDepth} levels) - MongoDB handles nested documents better`
-    );
-  } else if (analysis.isFlat) {
-    sqlScore += 25;
-    reasons.push(
-      `Flat structure (${analysis.nestingDepth} levels) - PostgreSQL JSONB is efficient for this`
-    );
-  } else {
-    sqlScore += 12;
-    mongoScore += 13;
-    reasons.push(
-      `Moderate nesting (${analysis.nestingDepth} levels) - Both databases can handle this`
-    );
-  }
-
-  // CRITICAL: If deeply nested, heavily favor MongoDB regardless of other factors
-  if (analysis.nestingDepth >= 5) {
-    mongoScore += 20; // Extra bonus for very deep nesting
-    reasons.push(
-      `Very deep nesting (${analysis.nestingDepth} levels) - Relational DB would be inefficient`
-    );
-  }
-
-  // CRITICAL: Nested arrays are a strong MongoDB indicator
-  if (analysis.hasNestedArrays) {
-    mongoScore += 15; // Strong signal for document DB
-    reasons.push(
-      `Nested arrays detected - MongoDB's document model handles this naturally`
-    );
-  }
-
-  // Factor 2: Tabular structure (weight: 25) - DECREASED weight
-  if (analysis.isTabular && !analysis.isDeeplyNested) {
-    // Only favor SQL if BOTH tabular AND not deeply nested
-    sqlScore += 25;
-    reasons.push(
-      `Tabular data with ${analysis.schemaConsistency.toFixed(
-        1
-      )}% schema consistency - Ideal for relational DB`
-    );
-  } else if (analysis.schemaConsistency < 50) {
-    mongoScore += 25;
-    reasons.push(
-      `Inconsistent schema (${analysis.schemaConsistency.toFixed(
-        1
-      )}% consistency) - MongoDB's flexible schema is better`
-    );
-  } else if (analysis.isDeeplyNested) {
-    // Tabular but deeply nested = still MongoDB
-    mongoScore += 15;
-    reasons.push(
-      `Consistent top-level schema but deeply nested - Document DB better for complex structure`
-    );
-  } else {
-    sqlScore += 12;
-    mongoScore += 13;
-    reasons.push(
-      `Moderate schema consistency (${analysis.schemaConsistency.toFixed(1)}%)`
-    );
-  }
-
-  // Factor 3: Field variance (weight: 20)
-  if (analysis.fieldVariance > 40) {
-    mongoScore += 20;
-    reasons.push(
-      `High field variance (${analysis.fieldVariance.toFixed(
-        1
-      )}%) - MongoDB handles optional fields better`
-    );
-  } else if (analysis.fieldVariance < 15) {
-    sqlScore += 20;
-    reasons.push(
-      `Low field variance (${analysis.fieldVariance.toFixed(
-        1
-      )}%) - Consistent structure suits SQL`
-    );
-  } else {
-    sqlScore += 10;
-    mongoScore += 10;
-  }
-
-  // Factor 4: Data sparseity (weight: 15)
-  if (analysis.dataSparseity > 30) {
-    mongoScore += 15;
-    reasons.push(
-      `Sparse data (${analysis.dataSparseity.toFixed(
-        1
-      )}% null values) - MongoDB saves space`
-    );
-  } else {
-    sqlScore += 15;
-    reasons.push(
-      `Dense data (${analysis.dataSparseity.toFixed(
-        1
-      )}% null values) - SQL handles well`
-    );
-  }
-
-  // Factor 5: Mixed types (weight: 10)
-  if (analysis.mixedTypes) {
-    mongoScore += 10;
-    reasons.push(
-      "Mixed field types detected - MongoDB's schema-less nature is advantageous"
-    );
-  } else {
-    sqlScore += 10;
-    reasons.push("Consistent field types - SQL type safety is beneficial");
-  }
-
-  // Factor 6: Structural complexity (NEW - weight: 15)
-  const avgObjectsPerItem =
-    analysis.totalFields > 0
-      ? analysis.objectCount / Math.max(1, analysis.totalFields)
-      : 0;
-  const avgArraysPerItem =
-    analysis.totalFields > 0
-      ? analysis.arrayCount / Math.max(1, analysis.totalFields)
-      : 0;
-
-  if (analysis.objectCount > 20 || analysis.arrayCount > 10) {
-    mongoScore += 15;
-    reasons.push(
-      `High structural complexity (${analysis.objectCount} nested objects, ${analysis.arrayCount} arrays) - Document DB excels here`
-    );
-  } else if (analysis.objectCount < 5 && analysis.arrayCount < 3) {
-    sqlScore += 15;
-  }
-
-  // Determine recommendation
-  const totalScore = sqlScore + mongoScore;
-  const mongoConfidence = (mongoScore / totalScore) * 100;
-  const sqlConfidence = (sqlScore / totalScore) * 100;
-
-  if (mongoScore > sqlScore) {
-    analysis.recommendedStorage = "mongodb";
-    analysis.confidence = mongoConfidence;
-  } else {
+  
+  // PRIMARY RULE: 90% Consistency Threshold with Multiple Checks
+  // 1. If schema consistency >= 90% → PostgreSQL
+  // 2. If schema consistency < 90% BUT data sparseity <= 15% AND field variance < 50% → PostgreSQL
+  // 3. Otherwise → MongoDB
+  
+  if (analysis.schemaConsistency >= 90) {
+    // High consistency - PostgreSQL
     analysis.recommendedStorage = "postgres";
-    analysis.confidence = sqlConfidence;
+    analysis.confidence = analysis.schemaConsistency;
+    reasons.push(
+      `✅ High schema consistency (${analysis.schemaConsistency.toFixed(1)}%) - PostgreSQL selected`
+    );
+    reasons.push(
+      `Consistent structure with ${analysis.totalFields} fields is ideal for relational database`
+    );
+    
+    // Additional context reasons
+    if (analysis.isFlat) {
+      reasons.push(`Flat structure (${analysis.nestingDepth} levels) enhances PostgreSQL efficiency`);
+    }
+    if (analysis.isTabular) {
+      reasons.push(`Tabular data format is perfect for SQL queries`);
+    }
+    if (analysis.fieldVariance < 20) {
+      reasons.push(`Low field variance (${analysis.fieldVariance.toFixed(1)}%) supports strong schema`);
+    }
+  } else if (analysis.dataSparseity <= 15 && analysis.fieldVariance < 50) {
+    // Low consistency BUT very few missing values AND moderate field variance - PostgreSQL
+    // This handles cases where objects have a few optional fields but are mostly consistent
+    analysis.recommendedStorage = "postgres";
+    analysis.confidence = Math.min(100 - analysis.dataSparseity, 100 - analysis.fieldVariance / 2);
+    reasons.push(
+      `✅ Very few missing values (${analysis.dataSparseity.toFixed(1)}% sparseity) and moderate field variance (${analysis.fieldVariance.toFixed(1)}%) - PostgreSQL selected`
+    );
+    reasons.push(
+      `Clean tabular data with optional fields is manageable in relational database (schema consistency: ${analysis.schemaConsistency.toFixed(1)}%)`
+    );
+    
+    // Additional context reasons
+    if (analysis.isTabular) {
+      reasons.push(`Tabular data format is perfect for SQL queries`);
+    }
+    if (analysis.isFlat) {
+      reasons.push(`Flat structure (${analysis.nestingDepth} levels) suits PostgreSQL`);
+    }
+    reasons.push(`PostgreSQL can handle optional fields efficiently with nullable columns`);
+  } else {
+    // High inconsistency - MongoDB
+    analysis.recommendedStorage = "mongodb";
+    analysis.confidence = 100 - analysis.schemaConsistency;
+    reasons.push(
+      `❌ High inconsistency detected (schema: ${analysis.schemaConsistency.toFixed(1)}%, field variance: ${analysis.fieldVariance.toFixed(1)}%) - MongoDB selected`
+    );
+    reasons.push(
+      `Flexible/inconsistent schema requires MongoDB's document model`
+    );
+    
+    // Additional context reasons
+    if (analysis.fieldVariance > 70) {
+      reasons.push(`Extremely high field variance (${analysis.fieldVariance.toFixed(1)}%) - Objects have very different structures`);
+    } else if (analysis.fieldVariance > 40) {
+      reasons.push(`High field variance (${analysis.fieldVariance.toFixed(1)}%) benefits from flexible schema`);
+    }
+    
+    if (analysis.schemaConsistency < 30) {
+      reasons.push(`Very low schema consistency (${analysis.schemaConsistency.toFixed(1)}%) - Objects share few common fields`);
+    }
+    
+    if (analysis.isDeeplyNested) {
+      reasons.push(`Deep nesting (${analysis.nestingDepth} levels) suits document database`);
+    }
+    if (analysis.hasNestedArrays) {
+      reasons.push(`Nested arrays are naturally handled by MongoDB`);
+    }
+    if (analysis.dataSparseity > 30) {
+      reasons.push(`Sparse data (${analysis.dataSparseity.toFixed(1)}% null values) saves space in MongoDB`);
+    }
+    if (analysis.mixedTypes) {
+      reasons.push(`Mixed field types leverage MongoDB's schema-less nature`);
+    }
   }
 
   analysis.reasoning = reasons;

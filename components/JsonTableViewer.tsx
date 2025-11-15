@@ -1,18 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Table2, List } from "lucide-react";
+import { ChevronDown, ChevronRight, Table2, FileJson } from "lucide-react";
 
 interface JsonTableViewerProps {
   data: any;
   title?: string;
+  storageType?: "postgres" | "mongodb";
 }
 
 export default function JsonTableViewer({
   data,
   title = "JSON Data",
+  storageType,
 }: JsonTableViewerProps) {
-  const [viewMode, setViewMode] = useState<"table" | "tree">("table");
+  // MongoDB data defaults to document view, PostgreSQL defaults to table view
+  const defaultView = storageType === "mongodb" ? "document" : "table";
+  const [viewMode, setViewMode] = useState<"table" | "document">(defaultView);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [displayLimit, setDisplayLimit] = useState(50);
   const [showAll, setShowAll] = useState(false);
@@ -217,87 +221,142 @@ export default function JsonTableViewer({
     return typeof value;
   };
 
-  const renderTreeView = (obj: any, path = "", level = 0): React.ReactNode => {
+  const renderDocumentView = (obj: any, path = "", level = 0): React.ReactNode => {
     if (obj === null || obj === undefined) {
-      return <span className="text-gray-400">null</span>;
+      return <span className="text-gray-400 italic">null</span>;
     }
 
     if (typeof obj !== "object") {
-      return renderCell(obj);
+      return renderDocumentValue(obj);
     }
 
-    const isExpanded = expandedPaths.has(path);
+    const isExpanded = expandedPaths.has(path) || level === 0;
     const isArray = Array.isArray(obj);
     const entries = isArray ? obj.map((v, i) => [i, v]) : Object.entries(obj);
 
-    return (
-      <div className={level > 0 ? "ml-6" : ""}>
-        <button
-          onClick={() => toggleExpand(path)}
-          className="flex items-center gap-1 hover:bg-gray-700 px-2 py-1 rounded group"
-        >
-          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          <span className="font-mono text-sm text-gray-400">
-            {isArray ? `Array[${obj.length}]` : `Object{${entries.length}}`}
-          </span>
-        </button>
-        {isExpanded && (
-          <div className="ml-4 border-l-2 border-gray-700 pl-2 mt-1">
-            {entries.map(([key, value]) => {
-              const currentPath = path ? `${path}.${key}` : String(key);
-              const isObject = typeof value === "object" && value !== null;
+    const openBracket = isArray ? "[" : "{";
+    const closeBracket = isArray ? "]" : "}";
 
-              return (
-                <div key={key} className="py-1">
-                  <div className="flex items-start gap-2">
-                    <span className="font-mono text-sm text-blue-400 min-w-[100px]">
-                      {key}:
-                    </span>
-                    {isObject
-                      ? renderTreeView(value, currentPath, level + 1)
-                      : renderCell(value)}
-                  </div>
-                </div>
-              );
-            })}
+    return (
+      <div className={level > 0 ? "ml-4" : ""}>
+        <div className="flex items-start gap-1">
+          {entries.length > 0 && (
+            <button
+              onClick={() => toggleExpand(path)}
+              className="text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded p-0.5 transition-colors mt-0.5 shrink-0"
+              title={isExpanded ? "Collapse" : "Expand"}
+            >
+              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          )}
+          <div className="flex-1 font-mono text-sm">
+            <span className="text-gray-500">{openBracket}</span>
+            {!isExpanded && entries.length > 0 && (
+              <span className="text-gray-600 italic text-xs ml-2">
+                {entries.length} {isArray ? "items" : "fields"}
+              </span>
+            )}
+            {isExpanded && (
+              <div className="ml-4 mt-1 space-y-1">
+                {entries.map(([key, value], idx) => {
+                  const currentPath = path ? `${path}.${key}` : String(key);
+                  const isObject = typeof value === "object" && value !== null;
+                  const isLastItem = idx === entries.length - 1;
+
+                  return (
+                    <div key={key} className="flex items-start gap-2">
+                      {!isArray && (
+                        <span className="text-blue-400 shrink-0">"{key}":</span>
+                      )}
+                      <div className="flex-1">
+                        {isObject
+                          ? renderDocumentView(value, currentPath, level + 1)
+                          : renderDocumentValue(value)}
+                      </div>
+                      {!isLastItem && <span className="text-gray-500">,</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <span className="text-gray-500">{closeBracket}</span>
           </div>
-        )}
+        </div>
       </div>
     );
+  };
+
+  const renderDocumentValue = (value: any): React.ReactNode => {
+    if (value === null || value === undefined) {
+      return <span className="text-purple-400 italic">null</span>;
+    }
+
+    if (typeof value === "boolean") {
+      return <span className="text-orange-400">{value.toString()}</span>;
+    }
+
+    if (typeof value === "number") {
+      return <span className="text-green-400">{value}</span>;
+    }
+
+    if (typeof value === "string") {
+      return <span className="text-yellow-400">"{value}"</span>;
+    }
+
+    return <span className="text-gray-300">{String(value)}</span>;
   };
 
   return (
     <div className="bg-gray-800 rounded-xl border-2 border-gray-700 shadow-sm">
       <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-gray-900 to-gray-800">
-        <h3 className="font-bold text-gray-100">{title}</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="font-bold text-gray-100">{title}</h3>
+          {storageType && (
+            <span
+              className={`text-xs px-3 py-1 rounded-full font-semibold border-2 ${
+                storageType === "mongodb"
+                  ? "bg-green-900/30 text-green-300 border-green-500/40"
+                  : "bg-blue-900/30 text-blue-300 border-blue-500/40"
+              }`}
+            >
+              {storageType === "mongodb" ? "MongoDB" : "PostgreSQL"}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode("table")}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${
               viewMode === "table"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "bg-gray-700 text-gray-300 hover:bg-gray-600 border-2 border-gray-600"
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600"
             }`}
+            title="Table View (Best for PostgreSQL data)"
           >
             <Table2 size={16} />
             Table
           </button>
           <button
-            onClick={() => setViewMode("tree")}
+            onClick={() => setViewMode("document")}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium transition-all ${
-              viewMode === "tree"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "bg-gray-700 text-gray-300 hover:bg-gray-600 border-2 border-gray-600"
+              viewMode === "document"
+                ? "bg-green-600 text-white shadow-lg shadow-green-500/30"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600 border border-gray-600"
             }`}
+            title="Document View (BSON format for MongoDB data)"
           >
-            <List size={16} />
-            Tree
+            <FileJson size={16} />
+            BSON
           </button>
         </div>
       </div>
 
       <div className="p-4 max-h-96 overflow-auto">
-        {viewMode === "table" ? renderTableView() : renderTreeView(data)}
+        {viewMode === "table" ? renderTableView() : (
+          <div className="bg-gray-900/50 rounded-lg p-4 font-mono text-sm border border-gray-700">
+            {renderDocumentView(data)}
+          </div>
+        )}
       </div>
     </div>
   );
