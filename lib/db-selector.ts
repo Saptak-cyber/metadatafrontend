@@ -5,9 +5,12 @@ import { analyzeJsonStructure, getAnalysisSummary } from "./json-analyzer";
  * Intelligent database selector based on file characteristics
  *
  * Logic for JSON files:
- * - Analyzes structure: nesting depth, schema consistency, field variance, data sparseity
- * - Tabular/flat data with consistent schema → PostgreSQL (better for queries)
- * - Deeply nested/inconsistent schema/sparse data → MongoDB (better for flexibility)
+ * - PRIMARY RULE: 90% Consistency Threshold with Multiple Checks
+ *   • Schema consistency >= 90% → PostgreSQL (structured data with consistent schema)
+ *   • Schema consistency < 90% BUT data sparseity <= 15% AND field variance < 50% → PostgreSQL
+ *     (clean tabular data with few optional fields)
+ *   • Otherwise → MongoDB (highly inconsistent/flexible schema)
+ * - Analyzes: schema consistency, data sparseity, field variance, nesting depth
  *
  * Other files:
  * - Images/Videos/Audio: PostgreSQL (ACID compliance for metadata)

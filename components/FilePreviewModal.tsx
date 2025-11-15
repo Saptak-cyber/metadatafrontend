@@ -108,6 +108,7 @@ export default function FilePreviewModal({
               <JsonTableViewer
                 data={content || file.metadata}
                 title={file.originalName}
+                storageType={file.storageType as "postgres" | "mongodb"}
               />
               <details className="mt-4">
                 <summary className="cursor-pointer text-sm font-semibold text-gray-200 hover:text-gray-100 p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors border border-gray-600">
