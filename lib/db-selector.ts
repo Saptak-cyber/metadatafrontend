@@ -1,26 +1,42 @@
 import { getFileExtension, getFileCategory } from "./utils";
+import { analyzeJsonStructure, getAnalysisSummary } from "./json-analyzer";
 
 /**
  * Intelligent database selector based on file characteristics
  *
- * Logic:
- * - JSON files: MongoDB (NoSQL) - better for flexible schema and nested data
- * - Large structured data: MongoDB (NoSQL) - better scalability
- * - Images/Videos/Binary: PostgreSQL (SQL) - better for relational metadata and ACID
- * - Default: PostgreSQL (SQL) - better for consistency and complex queries
+ * Logic for JSON files:
+ * - Analyzes structure: nesting depth, schema consistency, field variance, data sparseity
+ * - Tabular/flat data with consistent schema → PostgreSQL (better for queries)
+ * - Deeply nested/inconsistent schema/sparse data → MongoDB (better for flexibility)
+ *
+ * Other files:
+ * - Images/Videos/Audio: PostgreSQL (ACID compliance for metadata)
+ * - Large files (>1MB): MongoDB (better scalability)
+ * - Default: PostgreSQL
  */
-export function selectDatabase(file: {
-  filename: string;
-  size: number;
-  mimeType: string;
-  content?: any;
-}): "postgres" | "mongodb" {
+export function selectDatabase(
+  file: {
+    filename: string;
+    size: number;
+    mimeType: string;
+    content?: any;
+  },
+  options?: {
+    logAnalysis?: boolean;
+  }
+): "postgres" | "mongodb" {
   const extension = getFileExtension(file.filename);
   const category = getFileCategory(extension);
 
-  // JSON files go to MongoDB for flexible schema handling
-  if (extension === "json") {
-    return "mongodb";
+  // For JSON files, use detailed structure analysis
+  if (extension === "json" && file.content) {
+    const analysis = analyzeJsonStructure(file.content);
+    
+    if (options?.logAnalysis) {
+      console.log("\n" + getAnalysisSummary(analysis));
+    }
+
+    return analysis.recommendedStorage;
   }
 
   // Large JSON or structured data files go to MongoDB

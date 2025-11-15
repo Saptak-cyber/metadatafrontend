@@ -6,7 +6,7 @@ import { FileJson, AlertTriangle, CheckCircle, X } from "lucide-react";
 interface JsonSchemaPreviewProps {
   jsonContent: any;
   fileName: string;
-  onConfirm: () => void;
+  onConfirm: (mergeWithId?: string) => void;
   onCancel: () => void;
   similarSchemas?: Array<{ fileName: string; similarity: number; id: string }>;
 }
@@ -19,6 +19,7 @@ export default function JsonSchemaPreview({
   similarSchemas,
 }: JsonSchemaPreviewProps) {
   const [selectedMerge, setSelectedMerge] = useState<string | null>(null);
+  const [showFullPreview, setShowFullPreview] = useState(false);
 
   const analyzeSchema = (
     obj: any,
@@ -92,20 +93,39 @@ export default function JsonSchemaPreview({
 
     if (Array.isArray(data)) {
       if (data.length === 0) return <span className="text-gray-400">[]</span>;
+
+      const itemsToShow = showFullPreview ? data : data.slice(0, 3);
+      const hasMore = data.length > 3 && !showFullPreview;
+
       return (
         <div className="ml-4">
           <span className="text-gray-400">[</span>
-          {data.slice(0, 3).map((item, idx) => (
+          {itemsToShow.map((item, idx) => (
             <div key={idx} className="ml-4">
               {renderSchemaTree(item, level + 1)}
-              {idx < Math.min(data.length - 1, 2) && (
+              {idx < itemsToShow.length - 1 && (
                 <span className="text-gray-400">,</span>
               )}
             </div>
           ))}
-          {data.length > 3 && (
-            <div className="ml-4 text-gray-500">
-              ... {data.length - 3} more items
+          {hasMore && (
+            <div className="ml-4">
+              <button
+                onClick={() => setShowFullPreview(true)}
+                className="text-blue-400 hover:text-blue-300 text-sm underline"
+              >
+                ... show {data.length - 3} more items
+              </button>
+            </div>
+          )}
+          {showFullPreview && data.length > 3 && (
+            <div className="ml-4">
+              <button
+                onClick={() => setShowFullPreview(false)}
+                className="text-blue-400 hover:text-blue-300 text-sm underline"
+              >
+                show less
+              </button>
             </div>
           )}
           <span className="text-gray-400">]</span>
@@ -136,19 +156,21 @@ export default function JsonSchemaPreview({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-700">
+        <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-gray-900 to-gray-800">
           <div className="flex items-center gap-3">
-            <FileJson className="text-blue-600" size={24} />
+            <FileJson className="text-blue-400" size={24} />
             <div>
-              <h2 className="text-xl font-semibold">JSON Schema Preview</h2>
-              <p className="text-sm text-gray-600">{fileName}</p>
+              <h2 className="text-xl font-semibold text-gray-100">
+                JSON Schema Preview
+              </h2>
+              <p className="text-sm text-gray-400">{fileName}</p>
             </div>
           </div>
           <button
             onClick={onCancel}
-            className="text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-gray-400 hover:text-gray-100 hover:bg-gray-700 rounded-lg p-1.5 transition-all"
           >
             <X size={24} />
           </button>
@@ -157,28 +179,32 @@ export default function JsonSchemaPreview({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Schema Analysis */}
           <div>
-            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-              <CheckCircle className="text-green-500" size={20} />
+            <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-100">
+              <CheckCircle className="text-green-400" size={20} />
               Schema Analysis
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+            <div className="bg-gray-700 rounded-lg p-4 space-y-2 border border-gray-600">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-600">Total Fields:</span>
-                  <span className="ml-2 font-semibold">{schema.length}</span>
+                  <span className="text-gray-400">Total Fields:</span>
+                  <span className="ml-2 font-semibold text-gray-100">
+                    {schema.length}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Root Keys:</span>
-                  <span className="ml-2 font-semibold">{rootKeys.length}</span>
+                  <span className="text-gray-400">Root Keys:</span>
+                  <span className="ml-2 font-semibold text-gray-100">
+                    {rootKeys.length}
+                  </span>
                 </div>
               </div>
               <div className="mt-3">
-                <p className="text-xs text-gray-600 mb-2">Root Fields:</p>
+                <p className="text-xs text-gray-400 mb-2">Root Fields:</p>
                 <div className="flex flex-wrap gap-2">
                   {rootKeys.map((field, idx) => (
                     <span
                       key={idx}
-                      className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full"
+                      className="px-2 py-1 bg-blue-900 text-blue-300 text-xs rounded-full"
                     >
                       {field.key}:{" "}
                       <span className="font-mono">{field.type}</span>
@@ -192,12 +218,12 @@ export default function JsonSchemaPreview({
           {/* Similar Schemas Warning */}
           {similarSchemas && similarSchemas.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                <AlertTriangle className="text-yellow-500" size={20} />
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-100">
+                <AlertTriangle className="text-yellow-400" size={20} />
                 Similar Schemas Detected
               </h3>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-gray-700 mb-3">
+              <div className="bg-yellow-900/30 border border-yellow-800 rounded-lg p-4">
+                <p className="text-sm text-gray-300 mb-3">
                   Found {similarSchemas.length} existing file(s) with similar
                   schema. Would you like to merge?
                 </p>
@@ -205,7 +231,7 @@ export default function JsonSchemaPreview({
                   {similarSchemas.map((schema) => (
                     <label
                       key={schema.id}
-                      className="flex items-center gap-3 p-3 bg-white rounded border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"
+                      className="flex items-center gap-3 p-3 bg-gray-700 rounded border border-gray-600 hover:border-blue-500 cursor-pointer transition-colors"
                     >
                       <input
                         type="radio"
@@ -216,14 +242,16 @@ export default function JsonSchemaPreview({
                         className="w-4 h-4"
                       />
                       <div className="flex-1">
-                        <p className="text-sm font-medium">{schema.fileName}</p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-sm font-medium text-gray-100">
+                          {schema.fileName}
+                        </p>
+                        <p className="text-xs text-gray-400">
                           {Math.round(schema.similarity)}% similar schema
                         </p>
                       </div>
                     </label>
                   ))}
-                  <label className="flex items-center gap-3 p-3 bg-white rounded border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors">
+                  <label className="flex items-center gap-3 p-3 bg-gray-700 rounded border border-gray-600 hover:border-blue-500 cursor-pointer transition-colors">
                     <input
                       type="radio"
                       name="merge-option"
@@ -233,10 +261,10 @@ export default function JsonSchemaPreview({
                       className="w-4 h-4"
                     />
                     <div className="flex-1">
-                      <p className="text-sm font-medium">
+                      <p className="text-sm font-medium text-gray-100">
                         Create as new separate instance
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-400">
                         Don't merge with existing data
                       </p>
                     </div>
@@ -248,26 +276,34 @@ export default function JsonSchemaPreview({
 
           {/* JSON Preview */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Data Preview</h3>
-            <div className="bg-gray-900 text-green-400 rounded-lg p-4 font-mono text-sm overflow-x-auto max-h-96 overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-3 text-gray-100">
+              Data Preview
+            </h3>
+            <div className="bg-gray-950 text-green-400 rounded-lg p-4 font-mono text-sm overflow-x-auto max-h-96 overflow-y-auto border border-gray-700">
               {renderSchemaTree(jsonContent)}
             </div>
           </div>
         </div>
 
-        <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
+        <div className="p-4 border-t border-gray-700 bg-gray-900 flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+            className="px-6 py-2 border-2 border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
           >
             Cancel
           </button>
           <button
-            onClick={onConfirm}
+            onClick={() => {
+              if (selectedMerge === "new" || !selectedMerge) {
+                onConfirm();
+              } else {
+                onConfirm(selectedMerge);
+              }
+            }}
             disabled={
               similarSchemas && similarSchemas.length > 0 && !selectedMerge
             }
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
           >
             {selectedMerge === "new" ||
             !similarSchemas ||

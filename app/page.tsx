@@ -80,6 +80,53 @@ export default function Home() {
     fetchStats();
   };
 
+  const handleDelete = async (file: FileMetadata) => {
+    try {
+      const response = await fetch(
+        `/api/files/${file.id}?storageType=${file.storageType}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (response.ok) {
+        fetchFiles();
+        fetchStats();
+      } else {
+        const error = await response.json();
+        alert(`Delete failed: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Delete failed. Please try again.");
+    }
+  };
+
+  const handleRename = async (file: FileMetadata, newName: string) => {
+    try {
+      const response = await fetch(`/api/files/${file.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          storageType: file.storageType,
+          newName: newName,
+        }),
+      });
+
+      if (response.ok) {
+        fetchFiles();
+      } else {
+        const error = await response.json();
+        alert(`Rename failed: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Rename error:", error);
+      alert("Rename failed. Please try again.");
+    }
+  };
+
   const categories = Object.keys(stats.combined.byCategory);
   const extensions = Object.keys(stats.combined.byExtension);
 
@@ -113,7 +160,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setUploadModalOpen(true)}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all inline-block font-medium shadow-sm hover:shadow"
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all flex gap-2 font-medium shadow-sm hover:shadow"
               >
                 <Upload size={20} />
                 Upload Files
@@ -136,13 +183,15 @@ export default function Home() {
           ) : filteredFiles.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
               <Upload size={64} className="mb-4 text-gray-600" />
-              <h3 className="text-xl font-semibold mb-2 text-gray-300">No files found</h3>
+              <h3 className="text-xl font-semibold mb-2 text-gray-300">
+                No files found
+              </h3>
               <p className="text-sm mb-4">
                 Upload your first file to get started
               </p>
               <button
                 onClick={() => setUploadModalOpen(true)}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-8 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Upload Files
               </button>
@@ -160,6 +209,8 @@ export default function Home() {
                     key={`${file.storageType}-${file.id}`}
                     file={file}
                     onPreview={setPreviewFile}
+                    onDelete={handleDelete}
+                    onRename={handleRename}
                   />
                 ))}
               </div>

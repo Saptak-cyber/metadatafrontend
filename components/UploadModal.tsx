@@ -6,6 +6,8 @@ import EditableFileItem from "./EditableFileItem";
 import TagManager from "./TagManager";
 import JsonSchemaPreview from "./JsonSchemaPreview";
 import JsonInputModal from "./JsonInputModal";
+import JsonAnalysisCard from "./JsonAnalysisCard";
+import { analyzeJsonStructure, StructureAnalysis } from "@/lib/json-analyzer";
 
 type UploadTab = "files" | "json";
 
@@ -32,6 +34,7 @@ export default function UploadModal({
   const [jsonPreview, setJsonPreview] = useState<{
     content: any;
     fileName: string;
+    analysis?: StructureAnalysis;
     similarSchemas?: Array<{
       fileName: string;
       similarity: number;
@@ -42,6 +45,11 @@ export default function UploadModal({
   const [pendingJsonFile, setPendingJsonFile] = useState<{
     content: any;
     fileName: string;
+  } | null>(null);
+  const [invalidJsonData, setInvalidJsonData] = useState<{
+    rawText: string;
+    fileName: string;
+    error: string;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<UploadTab>("files");
 
@@ -67,7 +75,30 @@ export default function UploadModal({
       const jsonContent = JSON.parse(text);
       setPendingJsonFile({ content: jsonContent, fileName: file.name });
     } catch (e) {
-      alert(`Failed to parse JSON file: ${file.name}`);
+      // Open JSON editor with the invalid content and error message
+      const errorMsg = e instanceof Error ? e.message : "Invalid JSON format";
+      const errorMatch = errorMsg.match(/position (\d+)/);
+      const errorPosition = errorMatch ? parseInt(errorMatch[1]) : null;
+
+      // Calculate line and column from position
+      let errorLine = 1;
+      let errorCol = 1;
+      if (errorPosition !== null) {
+        const beforeError = text.substring(0, errorPosition);
+        errorLine = (beforeError.match(/\n/g) || []).length + 1;
+        const lastNewline = beforeError.lastIndexOf("\n");
+        errorCol = errorPosition - (lastNewline >= 0 ? lastNewline : 0);
+      }
+
+      const detailedError = `Parse error at line ${errorLine}, column ${errorCol}: ${errorMsg}`;
+
+      // Open editor with invalid JSON
+      setInvalidJsonData({
+        rawText: text,
+        fileName: file.name,
+        error: detailedError,
+      });
+      setJsonInputOpen(true);
     }
   };
 
@@ -126,6 +157,9 @@ export default function UploadModal({
   const confirmJsonUpload = async () => {
     if (!pendingJsonFile) return;
 
+    // Analyze JSON structure
+    const analysis = analyzeJsonStructure(pendingJsonFile.content);
+
     // Check for similar schemas in existing files
     const similarSchemas = await checkSimilarSchemas(pendingJsonFile.content);
 
@@ -133,6 +167,7 @@ export default function UploadModal({
       setJsonPreview({
         content: pendingJsonFile.content,
         fileName: pendingJsonFile.fileName,
+        analysis,
         similarSchemas,
       });
       setPendingJsonFile(null);
@@ -141,6 +176,7 @@ export default function UploadModal({
       setJsonPreview({
         content: pendingJsonFile.content,
         fileName: pendingJsonFile.fileName,
+        analysis,
         similarSchemas: [],
       });
       setPendingJsonFile(null);
@@ -151,36 +187,114 @@ export default function UploadModal({
     jsonContent: any
   ): Promise<Array<{ fileName: string; similarity: number; id: string }>> => {
     try {
+      console.log("=== MERGE DETECTION START ===");
+      console.log("Incoming JSON content:", jsonContent);
+
       const response = await fetch("/api/files?category=Data&extension=json");
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.log("Failed to fetch existing files:", response.status);
+        return [];
+      }
 
       const data = await response.json();
       const existingJsonFiles = data.files || [];
+      console.log(`Found ${existingJsonFiles.length} existing JSON files`);
 
-      // Simple schema similarity check
-      const currentKeys = Object.keys(jsonContent).sort();
       const similar: Array<{
         fileName: string;
         similarity: number;
         id: string;
       }> = [];
 
+      // Extract schema signature from incoming JSON
+      const incomingType = Array.isArray(jsonContent)
+        ? "array"
+        : typeof jsonContent;
+      const incomingKeys = Array.isArray(jsonContent)
+        ? jsonContent.length > 0 && typeof jsonContent[0] === "object"
+          ? Object.keys(jsonContent[0]).sort()
+          : []
+        : typeof jsonContent === "object" && jsonContent !== null
+        ? Object.keys(jsonContent).sort()
+        : [];
+
+      console.log("Incoming type:", incomingType);
+      console.log("Incoming keys:", incomingKeys);
+
+      // Check each existing file
       for (const file of existingJsonFiles) {
-        if (file.metadata && typeof file.metadata === "object") {
-          const fileKeys = Object.keys(file.metadata).sort();
-          const intersection = currentKeys.filter((k) => fileKeys.includes(k));
-          const union = new Set([...currentKeys, ...fileKeys]);
+        console.log(`\n--- Checking file: ${file.originalName} ---`);
+        console.log("File ID:", file.id);
+        console.log("Storage type:", file.storageType);
+
+        try {
+          // Fetch actual JSON file content via API
+          const fileResponse = await fetch(
+            `/api/files/content/${file.id}?storageType=${file.storageType}`
+          );
+          if (!fileResponse.ok) {
+            console.log(`Failed to fetch file content: ${fileResponse.status}`);
+            continue;
+          }
+
+          const fileContent = await fileResponse.json();
+          console.log("File content loaded:", fileContent);
+
+          // Extract schema signature from existing file
+          const fileType = Array.isArray(fileContent)
+            ? "array"
+            : typeof fileContent;
+          const fileKeys = Array.isArray(fileContent)
+            ? fileContent.length > 0 && typeof fileContent[0] === "object"
+              ? Object.keys(fileContent[0]).sort()
+              : []
+            : typeof fileContent === "object" && fileContent !== null
+            ? Object.keys(fileContent).sort()
+            : [];
+
+          console.log("File type:", fileType);
+          console.log("File keys:", fileKeys);
+
+          // Only compare if types match
+          if (incomingType !== fileType) {
+            console.log(`Type mismatch: ${incomingType} !== ${fileType}`);
+            continue;
+          }
+
+          // Skip if no keys to compare
+          if (incomingKeys.length === 0 || fileKeys.length === 0) {
+            console.log("No keys to compare (empty arrays or primitives)");
+            continue;
+          }
+
+          // Calculate similarity based on key overlap
+          const intersection = incomingKeys.filter((k) => fileKeys.includes(k));
+          const union = new Set([...incomingKeys, ...fileKeys]);
           const similarity = (intersection.length / union.size) * 100;
 
+          console.log("Intersection:", intersection);
+          console.log("Union size:", union.size);
+          console.log("Similarity:", similarity + "%");
+
           if (similarity >= 60) {
+            console.log(`✓ Match found! Adding to similar files`);
             similar.push({
               fileName: file.originalName,
               similarity,
               id: file.id,
             });
+          } else {
+            console.log(`✗ Similarity ${similarity}% below 60% threshold`);
           }
+        } catch (err) {
+          console.error(`Failed to load file ${file.originalName}:`, err);
+          continue;
         }
       }
+
+      console.log(`\n=== MERGE DETECTION COMPLETE ===`);
+      console.log(`Found ${similar.length} similar files`);
+      console.log("Similar files:", similar);
 
       return similar;
     } catch (error) {
@@ -189,20 +303,69 @@ export default function UploadModal({
     }
   };
 
-  const handleJsonPreviewConfirm = () => {
+  const handleJsonPreviewConfirm = async (mergeWithId?: string) => {
     if (!jsonPreview) return;
 
-    // Create file and add to upload list
-    const jsonString = JSON.stringify(jsonPreview.content, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const file = new File([blob], jsonPreview.fileName, {
-      type: "application/json",
-    });
-    setFilesWithNames((prev) => [
-      ...prev,
-      { file, customName: jsonPreview.fileName },
-    ]);
-    setJsonPreview(null);
+    // If merging with existing file
+    if (mergeWithId) {
+      try {
+        // Find the storage type from similar schemas
+        const targetSchema = jsonPreview.similarSchemas?.find(
+          (s) => s.id === mergeWithId
+        );
+        if (!targetSchema) {
+          alert("Target file not found for merge");
+          return;
+        }
+
+        // Determine storage type by fetching the file
+        const filesResponse = await fetch(
+          "/api/files?category=Data&extension=json"
+        );
+        const filesData = await filesResponse.json();
+        const targetFile = filesData.files.find(
+          (f: any) => f.id === mergeWithId
+        );
+
+        if (!targetFile) {
+          alert("Target file not found");
+          return;
+        }
+
+        const response = await fetch(`/api/files/${mergeWithId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storageType: targetFile.storageType,
+            mergeData: jsonPreview.content,
+          }),
+        });
+
+        if (response.ok) {
+          alert(`Data merged successfully with ${targetSchema.fileName}`);
+          setJsonPreview(null);
+          onUploadComplete();
+        } else {
+          const error = await response.json();
+          alert(`Merge failed: ${error.error}`);
+        }
+      } catch (error) {
+        console.error("Merge error:", error);
+        alert("Merge failed. Please try again.");
+      }
+    } else {
+      // Create file and add to upload list
+      const jsonString = JSON.stringify(jsonPreview.content, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const file = new File([blob], jsonPreview.fileName, {
+        type: "application/json",
+      });
+      setFilesWithNames((prev) => [
+        ...prev,
+        { file, customName: jsonPreview.fileName },
+      ]);
+      setJsonPreview(null);
+    }
   };
 
   const handleUpload = async () => {
@@ -420,19 +583,77 @@ export default function UploadModal({
       {jsonInputOpen && (
         <JsonInputModal
           isOpen={jsonInputOpen}
-          onClose={() => setJsonInputOpen(false)}
+          onClose={() => {
+            setJsonInputOpen(false);
+            setInvalidJsonData(null);
+          }}
           onSubmit={handleJsonInput}
+          initialContent={invalidJsonData?.rawText}
+          initialFileName={invalidJsonData?.fileName}
+          initialError={invalidJsonData?.error}
         />
       )}
 
       {jsonPreview && (
-        <JsonSchemaPreview
-          jsonContent={jsonPreview.content}
-          fileName={jsonPreview.fileName}
-          similarSchemas={jsonPreview.similarSchemas}
-          onConfirm={handleJsonPreviewConfirm}
-          onCancel={() => setJsonPreview(null)}
-        />
+        <>
+          {jsonPreview.analysis && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div className="p-6 border-b border-gray-700">
+                  <h2 className="text-xl font-bold text-gray-100">
+                    JSON Structure Analysis
+                  </h2>
+                  <p className="text-sm text-gray-400 mt-1">
+                    See how your data will be stored
+                  </p>
+                </div>
+                
+                <div className="p-6">
+                  <JsonAnalysisCard
+                    analysis={jsonPreview.analysis}
+                    filename={jsonPreview.fileName}
+                  />
+                  
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      onClick={() => {
+                        setJsonPreview(null);
+                      }}
+                      className="flex-1 px-6 py-2.5 border-2 border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        const preview = jsonPreview;
+                        setJsonPreview(null);
+                        // Continue to schema preview if there are similar schemas
+                        if (preview.similarSchemas && preview.similarSchemas.length > 0) {
+                          // Show schema preview without analysis modal
+                          setJsonPreview({ ...preview, analysis: undefined });
+                        } else {
+                          // No similar schemas, directly upload
+                          handleJsonPreviewConfirm();
+                        }
+                      }}
+                      className="flex-1 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <JsonSchemaPreview
+            jsonContent={jsonPreview.content}
+            fileName={jsonPreview.fileName}
+            similarSchemas={jsonPreview.similarSchemas}
+            onConfirm={handleJsonPreviewConfirm}
+            onCancel={() => setJsonPreview(null)}
+          />
+        </>
       )}
     </>
   );

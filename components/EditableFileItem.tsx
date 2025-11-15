@@ -60,7 +60,9 @@ export default function EditableFileItem({
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium truncate text-gray-100">{fileName}</p>
+            <p className="text-sm font-medium truncate text-gray-100">
+              {fileName}
+            </p>
             <button
               onClick={() => {
                 setEditValue(fileName);

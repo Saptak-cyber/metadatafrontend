@@ -19,11 +19,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
     }
 
-    const uploadDir = path.join(process.cwd(), "uploads");
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
     const uploadedFiles: FileMetadata[] = [];
 
     for (const file of files) {
@@ -36,6 +31,10 @@ export async function POST(request: NextRequest) {
       const filename = `${timestamp}-${Math.random()
         .toString(36)
         .substring(7)}.${extension}`;
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      if (!existsSync(uploadDir)) {
+        await mkdir(uploadDir, { recursive: true });
+      }
       const filePath = path.join(uploadDir, filename);
 
       // Save file to disk
@@ -58,8 +57,12 @@ export async function POST(request: NextRequest) {
         content: metadata,
       };
 
-      // Intelligent database selection
-      const storageType = selectDatabase(fileData);
+      // Intelligent database selection with analysis logging for JSON files
+      const storageType = selectDatabase(fileData, { 
+        logAnalysis: extension === "json" && Object.keys(metadata).length > 0 
+      });
+
+      console.log(`📁 ${file.name} → ${storageType.toUpperCase()}`);
 
       const fileMetadata: FileMetadata = {
         filename,
