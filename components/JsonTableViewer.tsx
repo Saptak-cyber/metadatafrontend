@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, ChevronRight, Table2, FileJson, Share2, Copy, FileDown } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Table2,
+  FileJson,
+  Share2,
+  Copy,
+  FileDown,
+} from "lucide-react";
 
 interface JsonTableViewerProps {
   data: any;
@@ -25,14 +33,18 @@ export default function JsonTableViewer({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+      if (
+        exportMenuRef.current &&
+        !exportMenuRef.current.contains(event.target as Node)
+      ) {
         setExportMenuOpen(false);
       }
     };
 
     if (exportMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [exportMenuOpen]);
 
@@ -236,7 +248,11 @@ export default function JsonTableViewer({
     return typeof value;
   };
 
-  const renderDocumentView = (obj: any, path = "", level = 0): React.ReactNode => {
+  const renderDocumentView = (
+    obj: any,
+    path = "",
+    level = 0
+  ): React.ReactNode => {
     if (obj === null || obj === undefined) {
       return <span className="text-gray-400 italic">null</span>;
     }
@@ -261,7 +277,11 @@ export default function JsonTableViewer({
               className="text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded p-0.5 transition-colors mt-0.5 shrink-0"
               title={isExpanded ? "Collapse" : "Expand"}
             >
-              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {isExpanded ? (
+                <ChevronDown size={14} />
+              ) : (
+                <ChevronRight size={14} />
+              )}
             </button>
           )}
           <div className="flex-1 font-mono text-sm">
@@ -336,20 +356,22 @@ export default function JsonTableViewer({
     const columns = Array.from(allKeys);
 
     // Create CSV header
-    const header = columns.map(col => `"${col}"`).join(",");
-    
+    const header = columns.map((col) => `"${col}"`).join(",");
+
     // Create CSV rows
     const rows = data.map((row) => {
-      return columns.map(col => {
-        const value = row[col];
-        if (value === null || value === undefined) {
-          return "";
-        }
-        if (typeof value === "object") {
-          return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
-        }
-        return `"${String(value).replace(/"/g, '""')}"`;
-      }).join(",");
+      return columns
+        .map((col) => {
+          const value = row[col];
+          if (value === null || value === undefined) {
+            return "";
+          }
+          if (typeof value === "object") {
+            return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
+          }
+          return `"${String(value).replace(/"/g, '""')}"`;
+        })
+        .join(",");
     });
 
     return [header, ...rows].join("\n");
@@ -357,22 +379,29 @@ export default function JsonTableViewer({
 
   const downloadCSV = () => {
     let csv: string;
-    
+
     if (Array.isArray(data) && data.length > 0) {
       csv = convertToCSV();
     } else {
       // For non-array data, create a simple key-value CSV
       if (typeof data === "object" && data !== null) {
         const entries = Object.entries(data);
-        csv = "Key,Value\n" + entries.map(([key, value]) => {
-          const val = typeof value === "object" ? JSON.stringify(value) : String(value);
-          return `"${key}","${val.replace(/"/g, '""')}"`;
-        }).join("\n");
+        csv =
+          "Key,Value\n" +
+          entries
+            .map(([key, value]) => {
+              const val =
+                typeof value === "object"
+                  ? JSON.stringify(value)
+                  : String(value);
+              return `"${key}","${val.replace(/"/g, '""')}"`;
+            })
+            .join("\n");
       } else {
         csv = `Value\n"${String(data).replace(/"/g, '""')}"`;
       }
     }
-    
+
     if (!csv) {
       alert("No data available to export");
       return;
@@ -380,11 +409,11 @@ export default function JsonTableViewer({
 
     // Create a data URI with CSV content
     const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-    
+
     // Download the CSV file
     const link = document.createElement("a");
     link.setAttribute("href", csvContent);
-    link.setAttribute("download", `${title.replace(/[^a-z0-9]/gi, '_')}.csv`);
+    link.setAttribute("download", `${title.replace(/[^a-z0-9]/gi, "_")}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -394,7 +423,7 @@ export default function JsonTableViewer({
   const copyToClipboard = async () => {
     try {
       let textToCopy: string;
-      
+
       // If in table view and data is array, copy as CSV
       if (viewMode === "table" && Array.isArray(data)) {
         textToCopy = convertToCSV();
@@ -408,7 +437,11 @@ export default function JsonTableViewer({
       }
 
       await navigator.clipboard.writeText(textToCopy);
-      alert(`Data copied to clipboard${viewMode === "table" && Array.isArray(data) ? " as CSV" : " as JSON"}!`);
+      alert(
+        `Data copied to clipboard${
+          viewMode === "table" && Array.isArray(data) ? " as CSV" : " as JSON"
+        }!`
+      );
       setExportMenuOpen(false);
     } catch (err) {
       console.error("Failed to copy:", err);
@@ -418,21 +451,25 @@ export default function JsonTableViewer({
 
   const downloadExcel = async () => {
     if (!data) {
-      alert('No data available to export');
+      alert("No data available to export");
       return;
     }
 
     try {
       // Dynamically import xlsx to avoid SSR/bundle issues
-      const XLSX = await import('xlsx');
+      const XLSX = await import("xlsx");
 
       let sheetData: any[];
-      
+
       if (Array.isArray(data) && data.length > 0) {
         // Build worksheet data as array of objects
         const allKeys = new Set<string>();
         data.forEach((item) => {
-          if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+          if (
+            typeof item === "object" &&
+            item !== null &&
+            !Array.isArray(item)
+          ) {
             Object.keys(item).forEach((k) => allKeys.add(k));
           }
         });
@@ -443,8 +480,8 @@ export default function JsonTableViewer({
           columns.forEach((col) => {
             const value = row[col];
             if (value === null || value === undefined) {
-              out[col] = '';
-            } else if (typeof value === 'object') {
+              out[col] = "";
+            } else if (typeof value === "object") {
               out[col] = JSON.stringify(value);
             } else {
               out[col] = value;
@@ -452,11 +489,11 @@ export default function JsonTableViewer({
           });
           return out;
         });
-      } else if (typeof data === 'object' && data !== null) {
+      } else if (typeof data === "object" && data !== null) {
         // For non-array objects, create key-value pairs
         sheetData = Object.entries(data).map(([key, value]) => ({
           Key: key,
-          Value: typeof value === 'object' ? JSON.stringify(value) : value
+          Value: typeof value === "object" ? JSON.stringify(value) : value,
         }));
       } else {
         sheetData = [{ Value: data }];
@@ -464,22 +501,22 @@ export default function JsonTableViewer({
 
       const ws = XLSX.utils.json_to_sheet(sheetData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
 
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([wbout], { type: "application/octet-stream" });
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `${title.replace(/[^a-z0-9]/gi, '_')}.xlsx`;
+      a.download = `${title.replace(/[^a-z0-9]/gi, "_")}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       setExportMenuOpen(false);
     } catch (err) {
-      console.error('Excel export failed:', err);
-      alert('Failed to export Excel. Falling back to CSV.');
+      console.error("Excel export failed:", err);
+      alert("Failed to export Excel. Falling back to CSV.");
       downloadCSV();
     }
   };
@@ -531,7 +568,7 @@ export default function JsonTableViewer({
               </button>
             </>
           )}
-          
+
           {/* MongoDB data only shows BSON label */}
           {storageType === "mongodb" && (
             <div className="px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-medium bg-green-600 text-white shadow-lg shadow-green-500/30">
@@ -539,9 +576,10 @@ export default function JsonTableViewer({
               BSON Document
             </div>
           )}
-          
+
           {/* Export dropdown - available for all data types */}
-          {(Array.isArray(data) || (typeof data === "object" && data !== null)) && (
+          {(Array.isArray(data) ||
+            (typeof data === "object" && data !== null)) && (
             <div className="relative" ref={exportMenuRef}>
               <button
                 onClick={() => setExportMenuOpen(!exportMenuOpen)}
@@ -550,9 +588,14 @@ export default function JsonTableViewer({
               >
                 <Share2 size={16} />
                 Export
-                <ChevronDown size={14} className={`transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform ${
+                    exportMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
               </button>
-              
+
               {exportMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-10 overflow-hidden">
                   <button
@@ -584,7 +627,9 @@ export default function JsonTableViewer({
       </div>
 
       <div className="p-4 max-h-96 overflow-auto">
-        {viewMode === "table" ? renderTableView() : (
+        {viewMode === "table" ? (
+          renderTableView()
+        ) : (
           <div className="bg-gray-900/50 rounded-lg p-4 font-mono text-sm border border-gray-700">
             {renderDocumentView(data)}
           </div>
